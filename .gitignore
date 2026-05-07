@@ -1,0 +1,9 @@
+node_modules/
+.output/
+.wxt/
+dist/
+*.zip
+*.crx
+*.xpi
+.env
+.env.local
