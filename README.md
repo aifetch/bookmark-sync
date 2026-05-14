@@ -1,42 +1,48 @@
 # Bookmark Sync
 
-浏览器书签同步管理扩展。通过 GitHub Gist 双向同步书签，树形展示，支持拖拽排序。
+English | [简体中文](./README.zh-CN.md)
 
-## 功能
+Bookmark Sync is a browser bookmark manager and bookmark sync extension for Chrome, Edge, and Firefox. It supports GitHub Gist bookmark sync, bookmark tree view, drag-and-drop sorting, duplicate bookmark detection, bookmark backup, and side panel bookmark management.
 
-- 树形展示书签，虚拟滚动，支持大量数据
-- 拖拽排序/移动书签和文件夹
-- URL 去重检测，重复书签弹窗提示
-- GitHub Gist 双向同步（自动防抖上传 + 手动同步）
-- 破坏性操作二次确认
-- 搜索过滤
-- 右键上下文菜单
-- 支持 Chrome / Firefox / Edge
+## Search Keywords
 
-## 技术栈
+`bookmark sync` `bookmark manager` `browser bookmark manager` `chrome extension` `edge extension` `firefox extension` `github gist sync` `bookmark backup` `bookmark tree` `side panel` `duplicate bookmark finder` `cross-browser bookmark sync` `书签同步` `书签管理` `浏览器书签管理` `GitHub Gist 同步` `书签备份` `侧边栏插件`
 
-- WXT（跨浏览器扩展框架）
+## Features
+
+- Tree view for bookmarks with virtual scrolling for large datasets
+- Drag-and-drop sorting and moving for bookmarks and folders
+- Duplicate URL detection with confirmation dialog
+- Two-way GitHub Gist sync with automatic debounced upload and manual sync
+- Confirmation for destructive operations
+- Search and filtering
+- Right-click context menu
+- Support for Chrome, Firefox, and Edge
+
+## Tech Stack
+
+- WXT for cross-browser extension development
 - React 18 + TypeScript
-- react-arborist（虚拟化树组件）
+- `react-arborist` for virtualized tree rendering
 - Tailwind CSS
 - GitHub Gist API
 
-## 开发
+## Development
 
 ```bash
-# 安装依赖
+# Install dependencies
 npm install
 
-# Chrome 开发模式
+# Chrome development
 npm run dev
 
-# Firefox 开发模式
+# Firefox development
 npm run dev:firefox
 ```
 
-在浏览器中加载 `.output/chrome-mv3` 或 `.output/firefox-mv2` 目录。
+Load `.output/chrome-mv3` or `.output/firefox-mv2` in your browser.
 
-## 构建
+## Build
 
 ```bash
 # Chrome
@@ -45,40 +51,40 @@ npm run build
 # Firefox
 npm run build:firefox
 
-# 打包 zip
+# Zip packages
 npm run zip
 npm run zip:firefox
 ```
 
-## 使用
+## Usage
 
-1. 打开扩展 Side Panel（点击工具栏图标）
-2. 进入设置，填入 GitHub Personal Access Token（仅需 `gist` 权限）
-3. 点击"同步"即可将书签数据同步到 GitHub Gist
+1. Open the extension side panel from the browser toolbar.
+2. Go to Settings and paste a GitHub Personal Access Token with the `gist` scope.
+3. Click `Sync` to synchronize bookmark data to GitHub Gist.
 
-## 目录结构
+## Project Structure
 
-```
+```text
 entrypoints/
-  background.ts          # Service Worker，处理消息和同步
-  sidepanel/             # Side Panel UI
-    App.tsx              # 主应用
-    components/          # UI 组件
+  background.ts          # Service Worker for messaging and sync
+  sidepanel/             # Side panel UI
+    App.tsx              # Main app
+    components/          # UI components
 lib/
-  types.ts               # 类型定义
-  gist-client.ts         # GitHub Gist API 封装
-  bookmark-adapter.ts    # 浏览器书签 API 适配层
-  sync-engine.ts         # 双向同步引擎
-  dedup.ts               # 去重逻辑
+  types.ts               # Type definitions
+  gist-client.ts         # GitHub Gist API wrapper
+  bookmark-adapter.ts    # Browser bookmarks API adapter
+  sync-engine.ts         # Two-way sync engine
+  dedup.ts               # Duplicate detection logic
 ```
 
-## 部署
+## Distribution
 
-- **Chrome Web Store**: `npm run zip` 生成 `.output/chrome-mv3.zip`，提交到开发者控制台
-- **Firefox Add-ons**: `npm run zip:firefox` 生成 `.output/firefox-mv2.zip`，提交到 AMO
-- **Edge Add-ons**: 使用 Chrome 产物提交到 Microsoft Partner Center
-- **本地开发**: 浏览器"加载已解压的扩展"指向 `.output/chrome-mv3` 或 `.output/firefox-mv2`
+- **Chrome Web Store**: run `npm run zip` and submit `.output/chrome-mv3.zip`
+- **Firefox Add-ons**: run `npm run zip:firefox` and submit `.output/firefox-mv2.zip`
+- **Edge Add-ons**: submit the Chrome build to Microsoft Partner Center
+- **Local development**: load the unpacked extension from `.output/chrome-mv3` or `.output/firefox-mv2`
 
-## 安全
+## Security
 
-GitHub Token 存储在 `browser.storage.local`，仅 Background Service Worker 访问，不暴露给 content script。
+The GitHub token is stored in `browser.storage.local`. It is only accessed by the background service worker and is not exposed to content scripts.
