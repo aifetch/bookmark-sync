@@ -15,6 +15,13 @@ export interface SyncState {
   lastSyncHash: string;
 }
 
+export interface SyncPayload {
+  bookmarks: BookmarkNode[];
+  clickCounts: Record<string, number>;
+  updatedAt: number;
+  clickCountsUpdatedAt: number;
+}
+
 export interface ConfirmOptions {
   title: string;
   message: string;

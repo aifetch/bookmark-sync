@@ -2,10 +2,21 @@
 
 export type ClickCounts = Record<string, number>;
 
+const CLICK_COUNTS_KEY = 'clickCounts';
+const CLICK_COUNTS_UPDATED_AT_KEY = 'clickCountsUpdatedAt';
+
 export async function loadClickCounts(): Promise<ClickCounts> {
   return new Promise((resolve) => {
-    chrome.storage.local.get('clickCounts', (r) => {
-      resolve((r.clickCounts as ClickCounts) ?? {});
+    chrome.storage.local.get(CLICK_COUNTS_KEY, (r) => {
+      resolve((r[CLICK_COUNTS_KEY] as ClickCounts) ?? {});
+    });
+  });
+}
+
+export async function loadClickCountsUpdatedAt(): Promise<number> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(CLICK_COUNTS_UPDATED_AT_KEY, (r) => {
+      resolve((r[CLICK_COUNTS_UPDATED_AT_KEY] as number) ?? 0);
     });
   });
 }
@@ -14,12 +25,39 @@ export async function incrementClickCount(id: string): Promise<number> {
   const counts = await loadClickCounts();
   const next = (counts[id] ?? 0) + 1;
   counts[id] = next;
-  chrome.storage.local.set({ clickCounts: counts });
+  chrome.storage.local.set({
+    [CLICK_COUNTS_KEY]: counts,
+    [CLICK_COUNTS_UPDATED_AT_KEY]: Date.now(),
+  });
   return next;
 }
 
-export async function saveClickCounts(counts: ClickCounts): Promise<void> {
-  chrome.storage.local.set({ clickCounts: counts });
+export async function saveClickCounts(counts: ClickCounts, updatedAt: number = Date.now()): Promise<void> {
+  chrome.storage.local.set({
+    [CLICK_COUNTS_KEY]: counts,
+    [CLICK_COUNTS_UPDATED_AT_KEY]: updatedAt,
+  });
+}
+
+export async function removeClickCounts(ids: string[]): Promise<ClickCounts> {
+  const counts = await loadClickCounts();
+  let changed = false;
+
+  for (const id of ids) {
+    if (id in counts) {
+      delete counts[id];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    chrome.storage.local.set({
+      [CLICK_COUNTS_KEY]: counts,
+      [CLICK_COUNTS_UPDATED_AT_KEY]: Date.now(),
+    });
+  }
+
+  return counts;
 }
 
 /** 根据点击次数返回热度等级 0-4 */

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 interface Props {
   token: string | null;
@@ -73,7 +73,7 @@ export function SettingsPanel({ token, onSaveToken, onBack }: Props) {
         <div className="border-t border-gray-100 pt-5 space-y-2">
           <h3 className="text-sm font-medium text-gray-700">关于</h3>
           <div className="text-xs text-gray-400 space-y-1">
-            <p>Bookmark Sync v1.0.0</p>
+            <p>Bookmark Sync v1.0.1</p>
             <p>数据存储在 GitHub Gist，浏览器扩展通过 GitHub API 双向同步书签。</p>
           </div>
         </div>

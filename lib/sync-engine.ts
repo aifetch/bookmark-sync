@@ -1,6 +1,12 @@
-import type { BookmarkNode, SyncState } from './types';
+import type { BookmarkNode, SyncPayload, SyncState } from './types';
 import { GistClient } from './gist-client';
 import { loadBrowserBookmarks } from './bookmark-adapter';
+import {
+  loadClickCounts,
+  loadClickCountsUpdatedAt,
+  saveClickCounts,
+  type ClickCounts,
+} from './click-counts';
 
 const STORAGE_KEY = 'bookmark-sync-state';
 const DEBOUNCE_MS = 5000;
@@ -40,27 +46,22 @@ export async function pullFromGist(token: string): Promise<{ success: boolean; m
       remoteHash = result.hash;
     }
 
+    const localTree = await loadBrowserBookmarks();
+    const localClickCounts = await loadClickCounts();
+
     if (!remoteContent || remoteContent === '{}') {
-      // Gist 为空，将本地数据推送上去
-      const localTree = await loadBrowserBookmarks();
-      if (localTree.length > 0) {
+      if (localTree.length > 0 || Object.keys(localClickCounts).length > 0) {
         return await pushToGist(token);
       }
       return { success: true, message: '远程数据为空，已跳过' };
     }
 
-    // 简单 last-write-wins：比较时间戳
-    const remoteState: SyncState = JSON.parse(remoteContent);
-    const localTree = await loadBrowserBookmarks();
-    const localTimestamp = getMaxTimestamp(localTree);
+    const remotePayload = deserializePayload(remoteContent);
+    const localClickCountsUpdatedAt = await loadClickCountsUpdatedAt();
 
-    // 解析远程书签数据
-    const remoteTree: BookmarkNode[] = remoteState.lastSyncTime > localTimestamp
-      ? deserializeTree(remoteContent)
-      : localTree;
-
-    // TODO: 更复杂的合并策略可以在这里扩展
-    // 目前简单策略：如果远程更新时间更新则使用远程数据
+    if (remotePayload.clickCountsUpdatedAt > localClickCountsUpdatedAt) {
+      await saveClickCounts(remotePayload.clickCounts, remotePayload.clickCountsUpdatedAt);
+    }
 
     await saveSyncState({
       gistId,
@@ -74,22 +75,45 @@ export async function pullFromGist(token: string): Promise<{ success: boolean; m
   }
 }
 
-/** 推送本地书签到 Gist */
+/** 推送本地书签与点击计数到 Gist */
 export async function pushToGist(token: string): Promise<{ success: boolean; message: string }> {
   const client = new GistClient(token);
   const state = await getSyncState();
 
   try {
     const localTree = await loadBrowserBookmarks();
-    const content = serializeTree(localTree);
+    const localTreeUpdatedAt = getMaxTimestamp(localTree);
+    const localClickCounts = await loadClickCounts();
+    const localClickCountsUpdatedAt = await loadClickCountsUpdatedAt();
 
     let gistId = state.gistId;
-    if (!gistId) {
+    let remoteContent: string | null = null;
+
+    if (gistId) {
+      const gist = await client.fetchGist(gistId);
+      const file = gist.files['bookmark-tree.json'];
+      remoteContent = file?.content ?? null;
+    } else {
       const result = await client.getOrCreateGist();
       gistId = result.gistId;
+      remoteContent = result.content;
     }
 
-    const newHash = await client.updateGist(gistId, content);
+    const remotePayload = remoteContent ? deserializePayload(remoteContent) : emptyPayload();
+
+    const useLocalBookmarks = localTreeUpdatedAt >= remotePayload.updatedAt;
+    const useLocalClickCounts = localClickCountsUpdatedAt >= remotePayload.clickCountsUpdatedAt;
+
+    const payload: SyncPayload = {
+      bookmarks: useLocalBookmarks ? localTree : remotePayload.bookmarks,
+      clickCounts: useLocalClickCounts ? localClickCounts : remotePayload.clickCounts,
+      updatedAt: useLocalBookmarks ? localTreeUpdatedAt : remotePayload.updatedAt,
+      clickCountsUpdatedAt: useLocalClickCounts
+        ? localClickCountsUpdatedAt
+        : remotePayload.clickCountsUpdatedAt,
+    };
+
+    const newHash = await client.updateGist(gistId, serializePayload(payload));
     await saveSyncState({
       gistId,
       lastSyncTime: Date.now(),
@@ -110,7 +134,7 @@ export async function syncBoth(token: string): Promise<{ success: boolean; messa
   return pushToGist(token);
 }
 
-/** 防抖上传：书签变更后延迟上传 */
+/** 防抖上传：本地数据变更后延迟上传 */
 export function scheduleUpload(token: string): void {
   if (uploadTimer) clearTimeout(uploadTimer);
   uploadTimer = setTimeout(() => {
@@ -119,29 +143,80 @@ export function scheduleUpload(token: string): void {
   }, DEBOUNCE_MS);
 }
 
-/** 序列化书签树 */
-function serializeTree(tree: BookmarkNode[]): string {
-  return JSON.stringify(tree, null, 2);
+function serializePayload(payload: SyncPayload): string {
+  return JSON.stringify(payload, null, 2);
 }
 
-/** 反序列化 */
-function deserializeTree(content: string): BookmarkNode[] {
+function deserializePayload(content: string): SyncPayload {
   try {
-    return JSON.parse(content);
+    const parsed = JSON.parse(content) as unknown;
+
+    if (Array.isArray(parsed)) {
+      const bookmarks = parsed as BookmarkNode[];
+      return {
+        bookmarks,
+        clickCounts: {},
+        updatedAt: getMaxTimestamp(bookmarks),
+        clickCountsUpdatedAt: 0,
+      };
+    }
+
+    if (isRecord(parsed) && Array.isArray(parsed.bookmarks)) {
+      const bookmarks = parsed.bookmarks as BookmarkNode[];
+      return {
+        bookmarks,
+        clickCounts: normalizeClickCounts(parsed.clickCounts),
+        updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : getMaxTimestamp(bookmarks),
+        clickCountsUpdatedAt: typeof parsed.clickCountsUpdatedAt === 'number'
+          ? parsed.clickCountsUpdatedAt
+          : 0,
+      };
+    }
   } catch {
-    return [];
+    // ignore invalid payload and fall back to empty payload
   }
+
+  return emptyPayload();
+}
+
+function normalizeClickCounts(value: unknown): ClickCounts {
+  if (!isRecord(value)) return {};
+
+  const result: ClickCounts = {};
+  for (const [id, rawCount] of Object.entries(value)) {
+    const count = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+    if (Number.isFinite(count) && count > 0) {
+      result[id] = count;
+    }
+  }
+
+  return result;
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function emptyPayload(): SyncPayload {
+  return {
+    bookmarks: [],
+    clickCounts: {},
+    updatedAt: 0,
+    clickCountsUpdatedAt: 0,
+  };
 }
 
 /** 获取树中最大的 updatedAt 时间戳 */
 function getMaxTimestamp(nodes: BookmarkNode[]): number {
   let max = 0;
+
   function walk(list: BookmarkNode[]) {
     for (const n of list) {
       if (n.updatedAt > max) max = n.updatedAt;
       if (n.children) walk(n.children);
     }
   }
+
   walk(nodes);
   return max;
 }

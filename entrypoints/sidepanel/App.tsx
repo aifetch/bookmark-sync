@@ -8,9 +8,10 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ContextMenu } from './components/ContextMenu';
 import { MoveToFolderDialog } from './components/MoveToFolderDialog';
 import { SyncStatus } from './components/SyncStatus';
+import { TopClickedList, type TopClickedBookmark } from './components/TopClickedList';
 import { loadBrowserBookmarks, createBookmark, removeBookmark, moveBookmark, updateBookmark } from '@/lib/bookmark-adapter';
 import { findDuplicate } from '@/lib/dedup';
-import { loadClickCounts, incrementClickCount } from '@/lib/click-counts';
+import { loadClickCounts, incrementClickCount, removeClickCounts } from '@/lib/click-counts';
 import type { ClickCounts } from '@/lib/click-counts';
 import type { BookmarkNode, ConfirmOptions } from '@/lib/types';
 
@@ -38,6 +39,7 @@ export default function App() {
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'duplicate' | 'error'>('idle');
   const [clickCounts, setClickCounts] = useState<ClickCounts>({});
+  const [topClickedCollapsed, setTopClickedCollapsed] = useState(true);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -104,6 +106,12 @@ export default function App() {
     window.open(url, '_blank');
     const next = await incrementClickCount(id);
     setClickCounts((prev) => ({ ...prev, [id]: next }));
+    chrome.runtime.sendMessage({ type: 'SCHEDULE_PUSH' });
+  }, []);
+
+  const clearClickCounts = useCallback(async (ids: string[]) => {
+    const next = await removeClickCounts(ids);
+    setClickCounts(next);
   }, []);
 
   const hasBookmarks = useCallback((node: BookmarkNode): boolean => {
@@ -134,9 +142,12 @@ export default function App() {
       });
       if (!ok) return;
       await removeBookmark(node.id, isFolder);
+      if (!isFolder) {
+        await clearClickCounts([node.id]);
+      }
       await refreshBookmarks();
     },
-    [askConfirm, refreshBookmarks, hasBookmarks]
+    [askConfirm, refreshBookmarks, hasBookmarks, clearClickCounts]
   );
 
   const handleRename = useCallback(
@@ -160,7 +171,10 @@ export default function App() {
     chrome.runtime.sendMessage({ type: 'SYNC' }, (res) => {
       if (res) {
         setSyncMessage(res.message);
-        if (res.success) refreshBookmarks();
+        if (res.success) {
+          refreshBookmarks();
+          loadClickCounts().then(setClickCounts);
+        }
       } else {
         setSyncMessage('同步失败');
       }
@@ -220,10 +234,7 @@ export default function App() {
           break;
         case 'open':
           if (node.url) {
-            window.open(node.url, '_blank');
-            incrementClickCount(node.id).then((n) =>
-              setClickCounts((prev) => ({ ...prev, [node.id]: n }))
-            );
+            void handleBookmarkClick(node.id, node.url);
           }
           break;
         case 'add-bookmark':
@@ -234,7 +245,7 @@ export default function App() {
           break;
       }
     },
-    [contextMenu, handleDelete, togglePin, refreshBookmarks]
+    [contextMenu, handleDelete, togglePin, refreshBookmarks, handleBookmarkClick]
   );
 
   const handleEdit = useCallback(
@@ -319,15 +330,20 @@ export default function App() {
     for (const id of selectedIds) {
       await removeBookmark(id, false);
     }
+    await clearClickCounts([...selectedIds]);
     await refreshBookmarks();
     exitBatchMode();
-  }, [selectedIds, askConfirm, refreshBookmarks, exitBatchMode]);
+  }, [selectedIds, askConfirm, refreshBookmarks, exitBatchMode, clearClickCounts]);
 
   const filteredBookmarks = useMemo(() => {
     if (!search.trim()) return bookmarks;
     const q = search.toLowerCase();
     return filterTree(bookmarks, q);
   }, [bookmarks, search]);
+
+  const topClickedBookmarks = useMemo(() => {
+    return collectTopClickedBookmarks(bookmarks, clickCounts);
+  }, [bookmarks, clickCounts]);
 
   return (
     <div
@@ -351,7 +367,17 @@ export default function App() {
             onSaveCurrentPage={handleSaveCurrentPage}
             saveStatus={saveStatus}
           />
-          <div className="flex-1 overflow-hidden">
+          {!batchMode && (
+            <TopClickedList
+              items={topClickedBookmarks}
+              collapsed={topClickedCollapsed}
+              onToggleCollapsed={() => setTopClickedCollapsed((prev) => !prev)}
+              onOpenBookmark={(id, url) => {
+                void handleBookmarkClick(id, url);
+              }}
+            />
+          )}
+          <div className="flex-1 min-h-0 overflow-hidden">
             <BookmarkTree
               data={filteredBookmarks}
               onMove={handleMove}
@@ -429,4 +455,35 @@ function filterTree(nodes: BookmarkNode[], query: string): BookmarkNode[] {
     }
   }
   return result;
+}
+
+function collectTopClickedBookmarks(nodes: BookmarkNode[], clickCounts: ClickCounts): TopClickedBookmark[] {
+  const items: TopClickedBookmark[] = [];
+
+  const visit = (nodeList: BookmarkNode[]) => {
+    for (const node of nodeList) {
+      if (node.url) {
+        const count = clickCounts[node.id] ?? 0;
+        if (count > 0) {
+          items.push({
+            id: node.id,
+            title: node.title,
+            url: node.url,
+            count,
+          });
+        }
+        continue;
+      }
+
+      if (node.children?.length) {
+        visit(node.children);
+      }
+    }
+  };
+
+  visit(nodes);
+
+  return items
+    .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
+    .slice(0, 10);
 }

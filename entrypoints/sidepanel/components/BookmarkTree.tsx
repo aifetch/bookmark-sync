@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Tree, NodeApi } from 'react-arborist';
 import type { BookmarkNode } from '@/lib/types';
 import type { ClickCounts } from '@/lib/click-counts';
@@ -62,8 +62,22 @@ function getFaviconUrl(url: string): string | null {
 
 export function BookmarkTree({ data, onMove, onRename, onContextMenu, pinnedIds, batchMode, selectedIds, onToggleSelect, clickCounts, onBookmarkClick }: Props) {
   const treeRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [treeHeight, setTreeHeight] = useState(0);
   const treeData = useMemo(() => flattenToTreeData(data), [data]);
   const nodeMap = useMemo(() => buildNodeMap(data), [data]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateHeight = () => setTreeHeight(container.clientHeight);
+    updateHeight();
+
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const handleMove = useCallback(
     (args: { dragIds: string[]; parentId: string | null; index: number }) => {
@@ -230,21 +244,23 @@ export function BookmarkTree({ data, onMove, onRename, onContextMenu, pinnedIds,
   }
 
   return (
-    <div className="h-full overflow-auto custom-scrollbar">
-      <Tree
-        ref={treeRef}
-        data={treeData}
-        openByDefault={false}
-        width="100%"
-        height={window.innerHeight - 110}
-        indent={18}
-        rowHeight={30}
-        overscanCount={10}
-        onMove={handleMove}
-        onRename={handleRename}
-      >
-        {NodeRenderer}
-      </Tree>
+    <div ref={containerRef} className="h-full overflow-hidden custom-scrollbar">
+      {treeHeight > 0 && (
+        <Tree
+          ref={treeRef}
+          data={treeData}
+          openByDefault={false}
+          width="100%"
+          height={treeHeight}
+          indent={18}
+          rowHeight={30}
+          overscanCount={10}
+          onMove={handleMove}
+          onRename={handleRename}
+        >
+          {NodeRenderer}
+        </Tree>
+      )}
     </div>
   );
 }

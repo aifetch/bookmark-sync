@@ -36,6 +36,13 @@ export default defineBackground(() => {
       });
       return true;
     }
+    if (msg.type === 'SCHEDULE_PUSH') {
+      getToken().then((token) => {
+        if (token) scheduleUpload(token);
+        sendResponse({ ok: true });
+      });
+      return true;
+    }
   });
 
   // 书签变更时防抖上传
