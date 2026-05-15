@@ -47,16 +47,69 @@ export default function App() {
     items: MenuItem[];
   } | null>(null);
 
+  const refreshBookmarks = useCallback(async () => {
+    const tree = await loadBrowserBookmarks();
+    setBookmarks(tree);
+  }, []);
+
+  const refreshPanelData = useCallback(async () => {
+    const [tree, counts] = await Promise.all([
+      loadBrowserBookmarks(),
+      loadClickCounts(),
+    ]);
+    setBookmarks(tree);
+    setClickCounts(counts);
+  }, []);
+
   useEffect(() => {
-    loadBrowserBookmarks().then(setBookmarks);
+    void refreshPanelData();
     chrome.runtime.sendMessage({ type: 'GET_TOKEN' }, (t) => setToken(t));
     // 恢复 pinnedIds
     chrome.storage.local.get('pinnedIds', (r) => {
       if (r.pinnedIds) setPinnedIds(new Set(r.pinnedIds as string[]));
     });
-    // 加载点击计数
-    loadClickCounts().then(setClickCounts);
-  }, []);
+  }, [refreshPanelData]);
+
+  useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        void refreshPanelData();
+        refreshTimer = null;
+      }, 100);
+    };
+
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (areaName !== 'local') return;
+
+      if (changes.pinnedIds) {
+        setPinnedIds(new Set((changes.pinnedIds.newValue as string[] | undefined) ?? []));
+      }
+      if (changes.clickCounts) {
+        setClickCounts((changes.clickCounts.newValue as ClickCounts) ?? {});
+      }
+    };
+
+    chrome.bookmarks.onCreated.addListener(scheduleRefresh);
+    chrome.bookmarks.onRemoved.addListener(scheduleRefresh);
+    chrome.bookmarks.onChanged.addListener(scheduleRefresh);
+    chrome.bookmarks.onMoved.addListener(scheduleRefresh);
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      chrome.bookmarks.onCreated.removeListener(scheduleRefresh);
+      chrome.bookmarks.onRemoved.removeListener(scheduleRefresh);
+      chrome.bookmarks.onChanged.removeListener(scheduleRefresh);
+      chrome.bookmarks.onMoved.removeListener(scheduleRefresh);
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [refreshPanelData]);
 
   const askConfirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -73,11 +126,6 @@ export default function App() {
     },
     [confirmResolver]
   );
-
-  const refreshBookmarks = useCallback(async () => {
-    const tree = await loadBrowserBookmarks();
-    setBookmarks(tree);
-  }, []);
 
   const handleAdd = useCallback(
     async (parentId: string, title: string, url?: string) => {
@@ -172,14 +220,15 @@ export default function App() {
       if (res) {
         setSyncMessage(res.message);
         if (res.success) {
-          refreshBookmarks();
-          loadClickCounts().then(setClickCounts);
+          void refreshPanelData();
+          // 浏览器书签 API 写入后可能有微小延迟，二次刷新兜底
+          setTimeout(() => void refreshPanelData(), 500);
         }
       } else {
         setSyncMessage('同步失败');
       }
     });
-  }, [refreshBookmarks]);
+  }, [refreshPanelData]);
 
   const togglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {

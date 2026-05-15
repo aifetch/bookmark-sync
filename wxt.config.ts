@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Bookmark Sync',
     description: '双向同步书签管理器 - 树形展示、拖拽排序、GitHub Gist 同步',
-    version: '1.0.1',
+    version: '1.0.3',
     permissions: ['bookmarks', 'storage', 'sidePanel', 'tabs'],
     action: {
       default_title: 'Bookmark Sync',

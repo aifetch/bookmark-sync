@@ -232,24 +232,20 @@ export function BookmarkTree({ data, onMove, onRename, onContextMenu, pinnedIds,
     );
   }, [onContextMenu, nodeMap, pinnedIds, batchMode, selectedIds, onToggleSelect, clickCounts, onBookmarkClick]);
 
-  if (treeData.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-2">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-        </svg>
-        <span>暂无书签数据</span>
-      </div>
-    );
-  }
-
   return (
     <div ref={containerRef} className="h-full overflow-hidden custom-scrollbar">
-      {treeHeight > 0 && (
+      {treeData.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-2">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>暂无书签数据</span>
+        </div>
+      ) : treeHeight > 0 ? (
         <Tree
           ref={treeRef}
           data={treeData}
-          openByDefault={false}
+          openByDefault={true}
           width="100%"
           height={treeHeight}
           indent={18}
@@ -260,7 +256,7 @@ export function BookmarkTree({ data, onMove, onRename, onContextMenu, pinnedIds,
         >
           {NodeRenderer}
         </Tree>
-      )}
+      ) : null}
     </div>
   );
 }
