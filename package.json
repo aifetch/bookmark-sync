@@ -1,6 +1,6 @@
 {
   "name": "bookmark-sync",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Browser bookmark manager extension with GitHub Gist sync, bookmark tree, drag-and-drop sorting, duplicate detection, and side panel support for Chrome, Edge, and Firefox.",
   "keywords": [
     "bookmark",

@@ -357,7 +357,7 @@ export default function App() {
         return;
       }
       setSaveStatus('saving');
-      await createBookmark('1', title, url);
+      await createBookmark('1', title, url, 0);
       await refreshBookmarks();
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);

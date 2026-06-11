@@ -18,6 +18,7 @@ export interface SyncState {
 export interface SyncPayload {
   bookmarks: BookmarkNode[];
   clickCounts: Record<string, number>;
+  clickCountsByUrl?: Record<string, number>;  // URL-based 备用数据
   updatedAt: number;
   clickCountsUpdatedAt: number;
 }

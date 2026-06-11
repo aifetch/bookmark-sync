@@ -245,7 +245,7 @@ export function BookmarkTree({ data, onMove, onRename, onContextMenu, pinnedIds,
         <Tree
           ref={treeRef}
           data={treeData}
-          openByDefault={true}
+          openByDefault={false}
           width="100%"
           height={treeHeight}
           indent={18}

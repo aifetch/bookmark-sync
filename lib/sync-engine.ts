@@ -67,6 +67,7 @@ export async function pullFromGist(token: string): Promise<SyncResult> {
       localClickCounts,
       remotePayload.bookmarks,
       remotePayload.clickCounts,
+      remotePayload.clickCountsByUrl,
     );
     const nextLocalClickCounts = materializeClickCounts(refreshedLocalTree, mergedUrlClickCounts);
     const nextClickCountsUpdatedAt = getClickCountsUpdatedAt(
@@ -116,6 +117,7 @@ export async function pushToGist(token: string): Promise<SyncResult> {
       localClickCounts,
       remotePayload.bookmarks,
       remotePayload.clickCounts,
+      remotePayload.clickCountsByUrl,
     );
     const nextLocalClickCounts = materializeClickCounts(localTree, mergedUrlClickCounts);
     const payloadClickCounts = materializeClickCounts(mergedBookmarks, mergedUrlClickCounts);
@@ -135,6 +137,7 @@ export async function pushToGist(token: string): Promise<SyncResult> {
     const payload: SyncPayload = {
       bookmarks: mergedBookmarks,
       clickCounts: payloadClickCounts,
+      clickCountsByUrl: Object.fromEntries(mergedUrlClickCounts),
       updatedAt: getMaxTimestamp(mergedBookmarks),
       clickCountsUpdatedAt: nextClickCountsUpdatedAt,
     };
@@ -257,6 +260,7 @@ function deserializePayload(content: string): SyncPayload {
       return {
         bookmarks,
         clickCounts: normalizeClickCounts(parsed.clickCounts),
+        clickCountsByUrl: normalizeClickCountsByUrl(parsed.clickCountsByUrl),
         updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : getMaxTimestamp(bookmarks),
         clickCountsUpdatedAt: typeof parsed.clickCountsUpdatedAt === 'number'
           ? parsed.clickCountsUpdatedAt
@@ -282,6 +286,20 @@ function normalizeClickCounts(value: unknown): ClickCounts {
   }
 
   return result;
+}
+
+function normalizeClickCountsByUrl(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const result: Record<string, number> = {};
+  for (const [url, rawCount] of Object.entries(value)) {
+    const count = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+    if (Number.isFinite(count) && count > 0) {
+      result[url] = count;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -449,9 +467,21 @@ function mergeClickCountsByUrl(
   localClickCounts: ClickCounts,
   remoteTree: BookmarkNode[],
   remoteClickCounts: ClickCounts,
+  remoteClickCountsByUrl?: Record<string, number>,
 ): Map<string, number> {
   const merged = aggregateClickCountsByUrl(localTree, localClickCounts);
 
+  // 优先使用 URL-based 的远程数据（更可靠）
+  if (remoteClickCountsByUrl) {
+    for (const [url, count] of Object.entries(remoteClickCountsByUrl)) {
+      const numCount = typeof count === 'number' ? count : Number(count);
+      if (Number.isFinite(numCount) && numCount > 0) {
+        merged.set(url, Math.max(merged.get(url) ?? 0, numCount));
+      }
+    }
+  }
+
+  // 再合并通过 ID 映射的远程数据（兼容旧版本）
   for (const [url, count] of aggregateClickCountsByUrl(remoteTree, remoteClickCounts)) {
     merged.set(url, Math.max(merged.get(url) ?? 0, count));
   }

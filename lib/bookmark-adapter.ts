@@ -39,7 +39,8 @@ function convertNode(node: chrome.bookmarks.BookmarkTreeNode): BookmarkNode {
 export async function createBookmark(
   parentId: string,
   title: string,
-  url?: string
+  url?: string,
+  index?: number
 ): Promise<BookmarkNode> {
   let normalizedUrl = url?.trim();
   // 无协议头时自动补全，避免 chrome.bookmarks.create 静默失败
@@ -50,6 +51,7 @@ export async function createBookmark(
     parentId,
     title,
     url: normalizedUrl || undefined,
+    index,
   });
   return convertNode(result);
 }
